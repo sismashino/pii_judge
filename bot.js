@@ -11,18 +11,20 @@ const PII_API_KEY = process.env.PII_API_KEY;
 const axios = require('axios');
 const {
     TextAnalysisClient,
-    AzureKeyCredential
+    AzureKeyCredential,
+    KnownPiiEntityDomain,
+    KnownPiiEntityCategory
 } = require('@azure/ai-language-text');
 
 var messages = [];
 
 var getCompletion = async function(text) {
-    messages.push(
-        {
-            role: 'user',
-            content: text
-        }
-    );
+    var send = {
+        role: 'user',
+        content: text
+    };
+
+    messages.push(send);
 
     var res = await axios({
         method: 'post',
@@ -43,7 +45,17 @@ var getCompletion = async function(text) {
 var checkPersonalInformation = async function(text) {
     const client = new TextAnalysisClient(PII_ENDPOINT_URL, new AzureKeyCredential(PII_API_KEY));
 
-    const [result] = await client.analyze('PiiEntityRecognition', [text], 'ja');
+    const [result] = await client.analyze('PiiEntityRecognition', [text], 'ja', {
+        domainFilter: KnownPiiEntityDomain.Phi,
+        categoriesFilter: [
+            KnownPiiEntityCategory.Person,
+            KnownPiiEntityCategory.Address,
+            KnownPiiEntityCategory.Email,
+            KnownPiiEntityCategory.JPMyNumberPersonal,
+            KnownPiiEntityCategory.CreditCardNumber,
+            KnownPiiEntityCategory.PhoneNumber
+        ]
+    });
 
     var piiList = [];
 
@@ -70,7 +82,7 @@ class EchoBot extends ActivityHandler {
                 } else {
                     var piiList = await checkPersonalInformation(context.activity.text);
 
-                    if (piiList.length > 100) {
+                    if (piiList.length > 0) {
                         ret = '以下の入力が個人情報にあたる可能性があります。';
                         for (const personal of piiList) {
                             ret += '\r\n' + personal;
